@@ -9,6 +9,10 @@
 - 想让 Claude Code 和 GPT/Codex 在同一个项目里遵守同一套规则。
 - 想让长任务可以跨多轮 Agent 接力，不依赖聊天历史。
 - 想把需求规划、代码生成、独立验收分开。
+- 想约束 Claude Code 和 GPT/Codex 在开发前先查找并复用已有逻辑，避免重复造轮子。
+- 想让新会话通过 `ai_snapshot.json` 快速恢复任务现场。
+- 想把复杂需求拆成独立 Task 沙盒，逐个推进和验收。
+- 想把缺陷复盘沉淀成可复用检查规约，减少重复犯错。
 - 想让 AI 定期扫描技术债，而不是等代码腐烂后集中重构。
 - 想把项目规则写进仓库，但不把 API key 写进仓库。
 
@@ -68,11 +72,16 @@ docs/ai/evaluation.md
 docs/ai/workflow.md
 docs/ai/golden-principles.md
 docs/ai/tooling.md
+docs/ai/quick-brief.md
+docs/ai/task-sandbox.md
+docs/ai/rca.md
+docs/ai/check-rules.md
 ```
 
 状态文件：
 
 ```text
+ai_snapshot.json
 claude-progress.txt
 session-state.md
 spec.md
@@ -80,6 +89,8 @@ evaluation.md
 todo.md
 verification.md
 debt-register.md
+defect-rca.md
+tasks/_template/
 ```
 
 Prompt 文件：
@@ -91,6 +102,8 @@ prompts/handoff.md
 prompts/planner.md
 prompts/generator.md
 prompts/evaluator.md
+prompts/task.md
+prompts/rca.md
 prompts/debt-scan.md
 prompts/debt-fix.md
 ```
@@ -100,6 +113,11 @@ prompts/debt-fix.md
 ```text
 init.sh
 scripts/context_reset_check.sh
+scripts/resume_from_snapshot.sh
+scripts/snapshot_update.sh
+scripts/quick_brief_check.sh
+scripts/task_new.sh
+scripts/rca_new.sh
 scripts/evaluator_check.sh
 scripts/ai_debt_scan.sh
 ```
@@ -159,6 +177,74 @@ docs/ai/
 
 不要把 `CLAUDE.md` 或 `AGENTS.md` 写成长文档。它们只负责告诉 Agent：当前任务应该读哪些文件。
 
+## 避免重复造轮子
+
+脚本会在 `CLAUDE.md` 和 `AGENTS.md` 中写入同一套复用约束：开发前先用 `rg`、目录浏览和已有测试查找同类实现、公共 helper、工具脚本、CMake target 和 fixture。
+
+Generator 和 Resume prompt 也会要求 Agent 优先复用、扩展或轻量抽取现有逻辑；只有现有逻辑不满足规格且复用会扩大风险时，才新增实现。新增公共 helper 后，需要登记到入口文件的 `Shared Utilities` 或相关 `docs/ai/` 文档中。
+
+## 四个工程化优化
+
+### 快照恢复
+
+`ai_snapshot.json` 是给 Agent 读取的最小恢复包，记录当前任务、当前步骤、下一步、必读文件、风险和验证状态。新会话先运行：
+
+```bash
+scripts/resume_from_snapshot.sh
+```
+
+每轮结束前运行：
+
+```bash
+scripts/snapshot_update.sh "当前任务" "当前步骤" "下一步"
+```
+
+### Quick Brief 分层阅读
+
+`docs/ai/quick-brief.md` 约定长 Markdown 文件在头部维护 15 行以内的摘要。Agent 续做时先读摘要，必要时再读正文，减少上下文噪声。
+
+检查长文档摘要覆盖：
+
+```bash
+scripts/quick_brief_check.sh
+```
+
+### Task 沙盒
+
+复杂需求不要全塞进一个 `spec.md`。先创建独立任务目录：
+
+```bash
+scripts/task_new.sh short-name
+```
+
+生成结构：
+
+```text
+tasks/TASK-YYYYMMDDHHMMSS-short-name/
+  task.md
+  ai_snapshot.json
+  verification.md
+  defect-rca.md
+```
+
+每个 Task 独立记录目标、验收标准、快照、验证和缺陷复盘；完成后再同步关键结论到根目录状态文件。
+
+### RCA 规约自愈
+
+当 Evaluator 失败、人类指出缺陷或同一问题连续失败时，使用：
+
+```text
+prompts/rca.md
+```
+
+也可以创建独立 RCA 模板：
+
+```bash
+scripts/rca_new.sh
+```
+
+RCA 的可复用结论写入 `docs/ai/check-rules.md`，让后续 Agent 在开发前能看到真实踩坑沉淀出的检查规则。
+
 ## 推荐日常流程
 
 如果需求还不清楚，先让 Agent 使用：
@@ -179,7 +265,7 @@ spec.md
 prompts/generator.md
 ```
 
-Generator 按 `spec.md` 小步实现，但不能写最终通过结论。
+Generator 按 `spec.md`、`todo.md` 或当前 Task 的开发队列连续实现。它完成一个小项并验证后，应继续领取下一个明确可执行的小项；只有遇到阻塞、失败、需求不清、范围扩大或上下文变浑浊时才交接。Generator 不能写最终通过结论。
 
 验收时使用：
 
@@ -226,6 +312,8 @@ prompts/handoff.md
 ```
 
 这个 Prompt 会要求 Agent 停止扩展任务，把状态写回文件系统，然后让下一轮干净上下文接手。
+
+正常开发不要每做完一个小项就使用 `prompts/handoff.md`。只有没有下一个明确可执行项、验证失败、需求需要确认、范围要扩大、上下文不健康或工具不可用时，才交接。
 
 ## Plan 文档怎么放
 
@@ -364,7 +452,8 @@ bash setup_ai_harness.sh --force
 
 ```text
 请阅读 AGENTS.md、spec.md 和 prompts/generator.md，
-按 spec.md 实现一个最小步骤。
+先查找并复用已有同类逻辑，再按 spec.md/todo.md 的开发队列连续实现；
+每完成一个小项就运行相关验证并记录结果，然后继续下一个明确可执行小项。
 ```
 
 独立验收：
@@ -378,7 +467,7 @@ bash setup_ai_harness.sh --force
 
 ```text
 请先运行 scripts/context_reset_check.sh，
-然后按照 prompts/resume.md 恢复状态并推进一个最小步骤。
+然后按照 prompts/resume.md 恢复状态，并从 ai_snapshot.json/todo.md/当前 Task 继续开发队列。
 ```
 
 交接收尾：
@@ -393,6 +482,7 @@ bash setup_ai_harness.sh --force
 - `CLAUDE.md` 和 `AGENTS.md` 只做短索引。
 - 细节规则放到 `docs/ai/`。
 - 模糊需求先写 `spec.md`。
+- 新增代码前先查找已有实现和公共工具，能复用就复用。
 - 实现后必须由 Evaluator 独立验收。
 - 长任务必须更新状态文件。
 - 技术债每天小步偿还，不攒到最后集中处理。
