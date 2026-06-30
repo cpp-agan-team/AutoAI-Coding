@@ -10,7 +10,7 @@
 #   CLAUDE.md                 — Claude Code 项目级 Harness 配置
 #   AGENTS.md                 — GPT/Codex 项目级 Harness 配置
 #   .claude/settings.json     — Claude Code 权限 + Hooks
-#   .claude/commands/full-code-review.md — Claude Code 全项目代码 Review 命令
+#   .claude/skills/full-code-review/SKILL.md — Claude Code 全项目代码 Review Skill
 #   .codex/skills/full-code-review/ — Codex 全项目代码 Review Skill
 #   docs/ai/*.md              — 按需读取的细节规则
 #   .cursorrules              — Cursor 项目配置
@@ -310,7 +310,7 @@ safe_write "CLAUDE.md" "# ${PROJECT_NAME} — AI Harness Index
 - 长任务、新会话接力或上下文变长时读 docs/ai/workflow.md
 - 拆分复杂任务前读 docs/ai/task-sandbox.md
 - 修复缺陷或重复失败后读 docs/ai/rca.md，并更新 docs/ai/check-rules.md
-- 项目完成后的全代码 Review：Claude Code 使用 \`/full-code-review\` 或读取 prompts/full-code-review.md
+- 项目完成后的全代码 Review：Claude Code 使用项目 Skill \`/full-code-review\` 或读取 prompts/full-code-review.md
 - 为长文件补充摘要前读 docs/ai/quick-brief.md
 - 做技术债巡检或修复前读 debt-register.md 和 prompts/debt-*.md
 
@@ -376,7 +376,7 @@ safe_write "AGENTS.md" "# ${PROJECT_NAME} — GPT/Codex Harness Index
 ## Read Only What You Need
 - 新会话或接力：ai_snapshot.json，然后按快照声明的 must_read 文件恢复
 - 工具/账号/模型配置说明：docs/ai/tooling.md
-- 项目完成后的全代码 Review：Codex 使用 Skill \`\$full-code-review\`；Claude 使用 \`/full-code-review\` 或 prompts/full-code-review.md
+- 项目完成后的全代码 Review：Codex 使用 Skill \`\$full-code-review\`；Claude 使用项目 Skill \`/full-code-review\` 或 prompts/full-code-review.md
 - 架构、抽象或重构判断：docs/ai/golden-principles.md
 - C++ 代码：docs/ai/cpp.md
 - 测试：docs/ai/testing.md
@@ -526,7 +526,7 @@ safe_write "docs/ai/evaluation.md" "# Evaluation Rules
 safe_write "docs/ai/tooling.md" "# AI Tooling
 
 ## Project Rule Entrypoints
-- Claude Code：读取 CLAUDE.md，使用 .claude/settings.json 的权限和 hooks，并可通过 .claude/commands/full-code-review.md 运行全项目代码 review。
+- Claude Code：读取 CLAUDE.md，使用 .claude/settings.json 的权限和 hooks，并可通过 .claude/skills/full-code-review/SKILL.md 运行全项目代码 review。
 - GPT/Codex：读取 AGENTS.md，并复用 docs/ai/、prompts/、spec.md、evaluation.md 等同一套 harness 文件。
 - Codex Skill：脚本会生成 .codex/skills/full-code-review，用于项目完成后的全仓库代码 review。
 - Cursor：读取 .cursorrules；详细规则仍以 docs/ai/ 为准。
@@ -544,7 +544,7 @@ safe_write "docs/ai/tooling.md" "# AI Tooling
 - 两个 Agent 都使用同一套 Planner / Generator / Evaluator 流程：spec.md、evaluation.md、prompts/*.md。
 - 两个 Agent 在开发前都必须先查找已有实现、公共 helper、测试 fixture、脚本和 CMake 逻辑；能复用就复用。
 - 两个 Agent 都必须遵守生产和验收分离；最终完成以 evaluation.md 的独立证据为准。
-- 项目完成后需要额外做一次全仓库 review 时，让 Claude 使用 \`/full-code-review\` 或 prompts/full-code-review.md，让 Codex 使用 \`\$full-code-review\`，重点检查真实 bug、风险和有效优化点，不要把输出变成重复补测试清单。
+- 项目完成后需要额外做一次全仓库 review 时，让 Claude 使用项目 Skill \`/full-code-review\` 或 prompts/full-code-review.md，让 Codex 使用 \`\$full-code-review\`，重点检查真实 bug、风险和有效优化点，不要把输出变成重复补测试清单。
 "
 
 safe_write "docs/ai/build.md" "# Build Rules
@@ -814,11 +814,16 @@ safe_write ".codex/skills/full-code-review/agents/openai.yaml" 'interface:
 
 
 # ============================================================================
-# 3. 全代码 Review Prompt — Claude 与通用入口
+# 3. 全代码 Review Skill/Prompt — Claude 与通用入口
 # ============================================================================
 
+safe_write ".claude/skills/full-code-review/SKILL.md" '---
+name: full-code-review
+description: Whole-project code review for a completed or nearly completed software project. Use when the user asks Claude to deeply read the entire repository after development, perform a full-code/full-repo review, check for bugs, regressions, security issues, architectural risks, or meaningful optimization opportunities, especially when they explicitly do not want piecemeal review or repeated generic test suggestions.
+---
+
+'"$FULL_CODE_REVIEW_PROMPT"
 safe_write "prompts/full-code-review.md" "$FULL_CODE_REVIEW_PROMPT"
-safe_write ".claude/commands/full-code-review.md" "$FULL_CODE_REVIEW_PROMPT"
 
 
 # ============================================================================
@@ -1347,7 +1352,7 @@ if [ -x scripts/resume_from_snapshot.sh ]; then
     echo \"\"
 fi
 
-for file in ai_snapshot.json CLAUDE.md AGENTS.md .claude/commands/full-code-review.md .codex/skills/full-code-review/SKILL.md .codex/skills/full-code-review/agents/openai.yaml prompts/full-code-review.md spec.md evaluation.md claude-progress.txt session-state.md todo.md verification.md debt-register.md defect-rca.md docs/ai/tooling.md docs/ai/workflow.md docs/ai/evaluation.md docs/ai/golden-principles.md docs/ai/quick-brief.md docs/ai/task-sandbox.md docs/ai/rca.md docs/ai/check-rules.md; do
+for file in ai_snapshot.json CLAUDE.md AGENTS.md .claude/skills/full-code-review/SKILL.md .codex/skills/full-code-review/SKILL.md .codex/skills/full-code-review/agents/openai.yaml prompts/full-code-review.md spec.md evaluation.md claude-progress.txt session-state.md todo.md verification.md debt-register.md defect-rca.md docs/ai/tooling.md docs/ai/workflow.md docs/ai/evaluation.md docs/ai/golden-principles.md docs/ai/quick-brief.md docs/ai/task-sandbox.md docs/ai/rca.md docs/ai/check-rules.md; do
     if [ -f \"\$file\" ]; then
         echo \"===== \$file =====\"
         sed -n '1,220p' \"\$file\"
@@ -1364,7 +1369,7 @@ REQUIRED_FILES=(
     "ai_snapshot.json"
     "CLAUDE.md"
     "AGENTS.md"
-    ".claude/commands/full-code-review.md"
+    ".claude/skills/full-code-review/SKILL.md"
     ".codex/skills/full-code-review/SKILL.md"
     ".codex/skills/full-code-review/agents/openai.yaml"
     "prompts/full-code-review.md"
@@ -2101,7 +2106,7 @@ safe_write "prompts/resume.md" "# Resume Prompt
 - 测试：docs/ai/testing.md
 - 构建/依赖：docs/ai/build.md
 - 规划/验收：docs/ai/evaluation.md、spec.md、evaluation.md
-- 全代码 Review：prompts/full-code-review.md；Claude Code 也可使用 /full-code-review，Codex 也可使用 \$full-code-review
+- 全代码 Review：prompts/full-code-review.md；Claude Code 可使用项目 Skill /full-code-review，Codex 也可使用 \$full-code-review
 - 长任务流程：docs/ai/workflow.md
 - 架构/重构/技术债：docs/ai/golden-principles.md、debt-register.md
 - 复杂任务：docs/ai/task-sandbox.md、当前 tasks/TASK-*/task.md
@@ -2179,7 +2184,7 @@ echo "已生成的 AI 配置文件："
 echo "  CLAUDE.md                — Claude Code 项目级规范"
 echo "  AGENTS.md                — GPT/Codex 项目级规范"
 echo "  .claude/settings.json    — Claude Code 权限 + Hooks"
-echo "  .claude/commands/full-code-review.md — Claude Code 全项目代码 Review 命令"
+echo "  .claude/skills/full-code-review/SKILL.md — Claude Code 全项目代码 Review Skill"
 echo "  .codex/skills/full-code-review/ — Codex 全项目代码 Review Skill"
 echo "  docs/ai/*.md             — 按需读取的细节规则"
 echo "  .cursorrules             — Cursor 配置"
@@ -2229,7 +2234,7 @@ echo "  8. 每轮结束运行 scripts/snapshot_update.sh 更新 ai_snapshot.json
 echo "  9. 运行 scripts/quick_brief_check.sh 检查长文档摘要覆盖"
 echo "  10. 运行 cmake -B build 验证构建配置"
 echo "  11. 定期用 prompts/debt-scan.md + scripts/ai_debt_scan.sh 巡检技术债"
-echo "  12. 项目开发完成后，让 Claude 使用 /full-code-review，或让 Codex 使用 \$full-code-review 做全仓库代码 review"
+echo "  12. 项目开发完成后，让 Claude 使用项目 Skill /full-code-review，或让 Codex 使用 \$full-code-review 做全仓库代码 review"
 echo "  13. 细节规则优先维护到 docs/ai/，不要把 CLAUDE.md/AGENTS.md 写成长文档"
 echo ""
 echo "提示：脚本不会创建 src/include/tests/libs/cmake 等业务目录；请沿用当前项目结构。"

@@ -82,7 +82,7 @@ docs/ai/check-rules.md
 全代码 Review 入口：
 
 ```text
-.claude/commands/full-code-review.md
+.claude/skills/full-code-review/SKILL.md
 .codex/skills/full-code-review/SKILL.md
 .codex/skills/full-code-review/agents/openai.yaml
 prompts/full-code-review.md
@@ -191,7 +191,7 @@ docs/ai/
 脚本还会生成全代码 Review 入口：
 
 ```text
-.claude/commands/full-code-review.md
+.claude/skills/full-code-review/SKILL.md
 .codex/skills/full-code-review/
 prompts/full-code-review.md
 ```
@@ -286,7 +286,7 @@ RCA 的可复用结论写入 `docs/ai/check-rules.md`，让后续 Agent 在开�
 
 ### 全代码 Review 入口
 
-开发完成并通过常规实现/验收流程后，使用 `.claude/commands/full-code-review.md`、`.codex/skills/full-code-review/` 或 `prompts/full-code-review.md` 触发全仓库 review。
+开发完成并通过常规实现/验收流程后，使用 `.claude/skills/full-code-review/SKILL.md`、`.codex/skills/full-code-review/` 或 `prompts/full-code-review.md` 触发全仓库 review。
 
 Claude Code 推荐：
 
