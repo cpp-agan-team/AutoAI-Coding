@@ -14,6 +14,7 @@
 - 想把复杂需求拆成独立 Task 沙盒，逐个推进和验收。
 - 想把缺陷复盘沉淀成可复用检查规约，减少重复犯错。
 - 想让 AI 定期扫描技术债，而不是等代码腐烂后集中重构。
+- 想在项目开发完成后，让 Codex 做一次全仓库代码 review，集中找真实 bug、风险和有效优化点。
 - 想把项目规则写进仓库，但不把 API key 写进仓库。
 
 ## 快速开始
@@ -76,6 +77,13 @@ docs/ai/quick-brief.md
 docs/ai/task-sandbox.md
 docs/ai/rca.md
 docs/ai/check-rules.md
+```
+
+Codex Skill 文件：
+
+```text
+.codex/skills/full-code-review/SKILL.md
+.codex/skills/full-code-review/agents/openai.yaml
 ```
 
 状态文件：
@@ -177,13 +185,27 @@ docs/ai/
 
 不要把 `CLAUDE.md` 或 `AGENTS.md` 写成长文档。它们只负责告诉 Agent：当前任务应该读哪些文件。
 
+脚本还会生成 Codex Skill：
+
+```text
+.codex/skills/full-code-review/
+```
+
+开发完成后需要做全项目检查时，可以让 Codex 使用：
+
+```text
+Use $full-code-review to review the entire project after development and report bugs, risks, and meaningful optimization opportunities.
+```
+
+这个 skill 要求 Codex 先建立全仓库地图，再系统阅读一方代码，输出真实 bug、风险和优化点；不会把结果变成重复的“补测试”清单。
+
 ## 避免重复造轮子
 
 脚本会在 `CLAUDE.md` 和 `AGENTS.md` 中写入同一套复用约束：开发前先用 `rg`、目录浏览和已有测试查找同类实现、公共 helper、工具脚本、CMake target 和 fixture。
 
 Generator 和 Resume prompt 也会要求 Agent 优先复用、扩展或轻量抽取现有逻辑；只有现有逻辑不满足规格且复用会扩大风险时，才新增实现。新增公共 helper 后，需要登记到入口文件的 `Shared Utilities` 或相关 `docs/ai/` 文档中。
 
-## 四个工程化优化
+## 五个工程化优化
 
 ### 快照恢复
 
@@ -244,6 +266,18 @@ scripts/rca_new.sh
 ```
 
 RCA 的可复用结论写入 `docs/ai/check-rules.md`，让后续 Agent 在开发前能看到真实踩坑沉淀出的检查规则。
+
+### 全代码 Review Skill
+
+开发完成并通过常规实现/验收流程后，使用 `.codex/skills/full-code-review/` 触发 Codex 全仓库 review。
+
+推荐在需要最终检查时直接说：
+
+```text
+用 full-code-review 帮我做全项目代码 review，重点找 bug、风险和有效优化点，不要重复泛泛建议补测试。
+```
+
+它适合做“完成后的完整检查”，不适合每改一点就问一次局部 review。
 
 ## 推荐日常流程
 
@@ -463,6 +497,12 @@ bash setup_ai_harness.sh --force
 运行真实验证，并把结果写入 evaluation.md。
 ```
 
+全代码 Review：
+
+```text
+用 full-code-review 帮我做全项目代码 review，重点找 bug、风险和有效优化点，不要重复泛泛建议补测试。
+```
+
 长任务接力：
 
 ```text
@@ -484,6 +524,7 @@ bash setup_ai_harness.sh --force
 - 模糊需求先写 `spec.md`。
 - 新增代码前先查找已有实现和公共工具，能复用就复用。
 - 实现后必须由 Evaluator 独立验收。
+- 项目完成后再用 `full-code-review` 做一次全仓库 review，不要拆成多次局部检查。
 - 长任务必须更新状态文件。
 - 技术债每天小步偿还，不攒到最后集中处理。
 - API key 永远不要进仓库。

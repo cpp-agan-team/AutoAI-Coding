@@ -10,6 +10,7 @@
 #   CLAUDE.md                 — Claude Code 项目级 Harness 配置
 #   AGENTS.md                 — GPT/Codex 项目级 Harness 配置
 #   .claude/settings.json     — Claude Code 权限 + Hooks
+#   .codex/skills/full-code-review/ — Codex 全项目代码 Review Skill
 #   docs/ai/*.md              — 按需读取的细节规则
 #   .cursorrules              — Cursor 项目配置
 #   .vscode/settings.json     — VS Code + Copilot 配置
@@ -310,6 +311,7 @@ safe_write "AGENTS.md" "# ${PROJECT_NAME} — GPT/Codex Harness Index
 ## Read Only What You Need
 - 新会话或接力：ai_snapshot.json，然后按快照声明的 must_read 文件恢复
 - 工具/账号/模型配置说明：docs/ai/tooling.md
+- 项目完成后的全代码 Review：使用 Codex Skill \`\$full-code-review\`
 - 架构、抽象或重构判断：docs/ai/golden-principles.md
 - C++ 代码：docs/ai/cpp.md
 - 测试：docs/ai/testing.md
@@ -461,6 +463,7 @@ safe_write "docs/ai/tooling.md" "# AI Tooling
 ## Project Rule Entrypoints
 - Claude Code：读取 CLAUDE.md，并使用 .claude/settings.json 的权限和 hooks。
 - GPT/Codex：读取 AGENTS.md，并复用 docs/ai/、prompts/、spec.md、evaluation.md 等同一套 harness 文件。
+- Codex Skill：脚本会生成 .codex/skills/full-code-review，用于项目完成后的全仓库代码 review。
 - Cursor：读取 .cursorrules；详细规则仍以 docs/ai/ 为准。
 - GitHub Copilot：由 .vscode/settings.json 启用，项目规范仍以 CLAUDE.md / AGENTS.md / docs/ai/ 为准。
 
@@ -476,6 +479,7 @@ safe_write "docs/ai/tooling.md" "# AI Tooling
 - 两个 Agent 都使用同一套 Planner / Generator / Evaluator 流程：spec.md、evaluation.md、prompts/*.md。
 - 两个 Agent 在开发前都必须先查找已有实现、公共 helper、测试 fixture、脚本和 CMake 逻辑；能复用就复用。
 - 两个 Agent 都必须遵守生产和验收分离；最终完成以 evaluation.md 的独立证据为准。
+- 项目完成后需要额外做一次全仓库 review 时，让 Codex 使用 \`\$full-code-review\`，重点检查真实 bug、风险和有效优化点，不要把输出变成重复补测试清单。
 "
 
 safe_write "docs/ai/build.md" "# Build Rules
@@ -665,9 +669,87 @@ tasks/TASK-YYYYMMDDHHMMSS-name/
 - 续做任务：先读根 ai_snapshot.json，再读对应 Task 的 ai_snapshot.json 和 task.md。
 "
 
+# ============================================================================
+# 2. Codex Skill — 项目完成后的全代码 Review
+# ============================================================================
+
+safe_write ".codex/skills/full-code-review/SKILL.md" '---
+name: full-code-review
+description: Whole-project code review for a completed or nearly completed software project. Use when the user asks Codex to deeply read the entire repository after development, perform a full-code/full-repo review, check for bugs, regressions, security issues, architectural risks, or meaningful optimization opportunities, especially when they explicitly do not want piecemeal review or repeated generic test suggestions.
+---
+
+# Full Code Review
+
+## Purpose
+
+Perform a full-repository review after project development. Prioritize real defects, behavioral risks, security/data-integrity issues, maintainability problems, and worthwhile optimizations. Do not turn the review into a repeated request to add tests.
+
+## Operating Rules
+
+- Review the whole first-party project, not only the latest diff, unless the user explicitly narrows scope.
+- Do not ask the user to approve each review slice. Build a repo map, inspect systematically, and continue until the full pass is complete or a hard blocker prevents progress.
+- Do not edit code during the review unless the user explicitly asks for fixes. The output is findings and recommendations.
+- Respect dirty worktrees. Treat existing local changes as user work; do not revert or overwrite them.
+- Use source evidence. A finding should cite file and line references whenever possible and explain the failure mode.
+- Avoid generic test advice. Mention tests only when tied to a concrete defect/regression path, or once in a short residual-risk note.
+- If the repository is too large to inspect every generated or vendored file, explicitly exclude generated/vendor/build artifacts and list any first-party areas that could not be reviewed.
+
+## Review Workflow
+
+1. Establish the repo root and state.
+   - Run `git rev-parse --show-toplevel` when available.
+   - Run `git status --short` to notice user changes.
+   - Build the inventory with `git ls-files`; fall back to `rg --files`.
+
+2. Create a project map before judging code.
+   - Read `README`, package manifests, dependency files, build configs, framework configs, CI/deploy files, environment examples, schema/migration files, and main entry points.
+   - If `.zread/wiki/current` exists, read the relevant generated pages for orientation, but verify important claims against source.
+   - Classify files into app source, API/backend, frontend/UI, data/schema, scripts/jobs, infrastructure/config, tests, docs, generated/vendor/build artifacts.
+
+3. Inspect all first-party implementation areas systematically.
+   - Walk directory by directory rather than sampling only suspicious files.
+   - Trace important user flows end to end: input validation, auth/permission checks, persistence, background jobs, external calls, error handling, retries, cancellation, and UI state transitions.
+   - Check shared contracts: API schemas, database models, environment variables, serialization formats, route names, feature flags, and build/runtime assumptions.
+   - Use targeted searches to find risk patterns: `TODO`, `FIXME`, `HACK`, `XXX`, `debugger`, `console.log`, broad catches, ignored lint/type errors, unsafe casts, unchecked `any`, raw SQL, shell execution, eval-like behavior, secrets, auth bypasses, hard-coded URLs, and duplicated business rules.
+
+4. Run low-risk verification commands when discoverable.
+   - Prefer existing scripts from package manifests, Makefiles, task runners, or CI configs.
+   - Run static checks, type checks, linters, builds, or focused smoke commands when practical.
+   - Do not make test coverage the center of the review. Use command results to support or disprove concrete concerns.
+
+5. Triage findings.
+   - Lead with high-confidence issues that can cause wrong behavior, data loss, security exposure, production failures, or broken user workflows.
+   - Include optimization opportunities only when they are meaningful: clear performance wins, simpler architecture, reduced duplication, less fragile state handling, or easier operational debugging.
+   - Do not report style preferences as findings unless they create real maintenance risk.
+
+## Output Format
+
+Start with findings, ordered by severity. Use this structure:
+
+```text
+Findings
+- High/Medium/Low: <short title> - <file:line>
+  Impact: <what can go wrong>
+  Evidence: <why the code behaves that way>
+  Recommendation: <specific fix direction>
+```
+
+Then include:
+
+- `Optimization Opportunities`: only concrete, worthwhile improvements.
+- `Coverage`: directories or subsystems reviewed, commands run, and any exclusions.
+- `Residual Risk`: short note for areas that could not be verified. Mention test gaps here only once, and only if relevant.
+
+If no high-confidence problems are found, say so clearly and still include coverage and residual risk.'
+
+safe_write ".codex/skills/full-code-review/agents/openai.yaml" 'interface:
+  display_name: "Full Code Review"
+  short_description: "全项目深度代码审查，聚焦真实 bug、风险与有效优化点"
+  default_prompt: "Use $full-code-review to review the entire project after development and report bugs, risks, and meaningful optimization opportunities."'
+
 
 # ============================================================================
-# 2. .claude/settings.json — 权限 + Hooks
+# 3. .claude/settings.json — 权限 + Hooks
 # ============================================================================
 
 safe_write ".claude/settings.json" '{
@@ -759,7 +841,7 @@ safe_write ".claude/settings.json" '{
 
 
 # ============================================================================
-# 3. .cursorrules — Cursor 配置
+# 4. .cursorrules — Cursor 配置
 # ============================================================================
 
 safe_write ".cursorrules" "你是一位资深 C++ 工程师，精通现代 C++${CPP_STD} 和 CMake。
@@ -792,7 +874,7 @@ C++ 标准：C++${CPP_STD}
 
 
 # ============================================================================
-# 6. .vscode/settings.json — VS Code + Copilot 配置
+# 5. .vscode/settings.json — VS Code + Copilot 配置
 # ============================================================================
 
 safe_write ".vscode/settings.json" '{
@@ -830,7 +912,7 @@ safe_write ".vscode/extensions.json" '{
 
 
 # ============================================================================
-# 7. .clang-format — 被 Hook 引用，必须存在
+# 6. .clang-format — 被 Hook 引用，必须存在
 # ============================================================================
 
 safe_write ".clang-format" "---
@@ -858,7 +940,7 @@ Standard: c++${CPP_STD}
 
 
 # ============================================================================
-# 8. 长任务接力 Harness — 状态外化到文件系统
+# 7. 长任务接力 Harness — 状态外化到文件系统
 # ============================================================================
 
 safe_write "ai_snapshot.json" "{
@@ -1192,7 +1274,7 @@ if [ -x scripts/resume_from_snapshot.sh ]; then
     echo \"\"
 fi
 
-for file in ai_snapshot.json CLAUDE.md AGENTS.md spec.md evaluation.md claude-progress.txt session-state.md todo.md verification.md debt-register.md defect-rca.md docs/ai/tooling.md docs/ai/workflow.md docs/ai/evaluation.md docs/ai/golden-principles.md docs/ai/quick-brief.md docs/ai/task-sandbox.md docs/ai/rca.md docs/ai/check-rules.md; do
+for file in ai_snapshot.json CLAUDE.md AGENTS.md .codex/skills/full-code-review/SKILL.md .codex/skills/full-code-review/agents/openai.yaml spec.md evaluation.md claude-progress.txt session-state.md todo.md verification.md debt-register.md defect-rca.md docs/ai/tooling.md docs/ai/workflow.md docs/ai/evaluation.md docs/ai/golden-principles.md docs/ai/quick-brief.md docs/ai/task-sandbox.md docs/ai/rca.md docs/ai/check-rules.md; do
     if [ -f \"\$file\" ]; then
         echo \"===== \$file =====\"
         sed -n '1,220p' \"\$file\"
@@ -1209,6 +1291,8 @@ REQUIRED_FILES=(
     "ai_snapshot.json"
     "CLAUDE.md"
     "AGENTS.md"
+    ".codex/skills/full-code-review/SKILL.md"
+    ".codex/skills/full-code-review/agents/openai.yaml"
     "spec.md"
     "evaluation.md"
     "claude-progress.txt"
@@ -1964,7 +2048,7 @@ safe_write "prompts/resume.md" "# Resume Prompt
 
 
 # ============================================================================
-# 9. .gitignore 追加
+# 8. .gitignore 追加
 # ============================================================================
 
 info "更新 .gitignore ..."
@@ -1991,7 +2075,7 @@ ok ".gitignore (已追加必要条目)"
 
 
 # ============================================================================
-# 10. 创建 Harness 目录（不创建业务代码目录）
+# 9. 创建 Harness 目录（不创建业务代码目录）
 # ============================================================================
 
 for dir in prompts docs/ai scripts tasks rca; do
@@ -2019,6 +2103,7 @@ echo "已生成的 AI 配置文件："
 echo "  CLAUDE.md                — Claude Code 项目级规范"
 echo "  AGENTS.md                — GPT/Codex 项目级规范"
 echo "  .claude/settings.json    — Claude Code 权限 + Hooks"
+echo "  .codex/skills/full-code-review/ — Codex 全项目代码 Review Skill"
 echo "  docs/ai/*.md             — 按需读取的细节规则"
 echo "  .cursorrules             — Cursor 配置"
 echo "  .vscode/settings.json    — VS Code + Copilot 配置"
@@ -2066,7 +2151,8 @@ echo "  8. 每轮结束运行 scripts/snapshot_update.sh 更新 ai_snapshot.json
 echo "  9. 运行 scripts/quick_brief_check.sh 检查长文档摘要覆盖"
 echo "  10. 运行 cmake -B build 验证构建配置"
 echo "  11. 定期用 prompts/debt-scan.md + scripts/ai_debt_scan.sh 巡检技术债"
-echo "  12. 细节规则优先维护到 docs/ai/，不要把 CLAUDE.md/AGENTS.md 写成长文档"
+echo "  12. 项目开发完成后，让 Codex 使用 \$full-code-review 做全仓库代码 review"
+echo "  13. 细节规则优先维护到 docs/ai/，不要把 CLAUDE.md/AGENTS.md 写成长文档"
 echo ""
 echo "提示：脚本不会创建 src/include/tests/libs/cmake 等业务目录；请沿用当前项目结构。"
 echo "提示：测试框架选择只写入 AI 规范，不会自动安装或接入 GTest/Catch2。"
