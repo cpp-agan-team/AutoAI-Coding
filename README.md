@@ -14,7 +14,7 @@
 - 想把复杂需求拆成独立 Task 沙盒，逐个推进和验收。
 - 想把缺陷复盘沉淀成可复用检查规约，减少重复犯错。
 - 想让 AI 定期扫描技术债，而不是等代码腐烂后集中重构。
-- 想在项目开发完成后，让 Codex 做一次全仓库代码 review，集中找真实 bug、风险和有效优化点。
+- 想在项目开发完成后，让 Claude 或 Codex 做一次全仓库代码 review，集中找真实 bug、风险和有效优化点。
 - 想把项目规则写进仓库，但不把 API key 写进仓库。
 
 ## 快速开始
@@ -79,11 +79,13 @@ docs/ai/rca.md
 docs/ai/check-rules.md
 ```
 
-Codex Skill 文件：
+全代码 Review 入口：
 
 ```text
+.claude/commands/full-code-review.md
 .codex/skills/full-code-review/SKILL.md
 .codex/skills/full-code-review/agents/openai.yaml
+prompts/full-code-review.md
 ```
 
 状态文件：
@@ -110,6 +112,7 @@ prompts/handoff.md
 prompts/planner.md
 prompts/generator.md
 prompts/evaluator.md
+prompts/full-code-review.md
 prompts/task.md
 prompts/rca.md
 prompts/debt-scan.md
@@ -185,19 +188,33 @@ docs/ai/
 
 不要把 `CLAUDE.md` 或 `AGENTS.md` 写成长文档。它们只负责告诉 Agent：当前任务应该读哪些文件。
 
-脚本还会生成 Codex Skill：
+脚本还会生成全代码 Review 入口：
 
 ```text
+.claude/commands/full-code-review.md
 .codex/skills/full-code-review/
+prompts/full-code-review.md
 ```
 
-开发完成后需要做全项目检查时，可以让 Codex 使用：
+开发完成后需要做全项目检查时，可以让 Claude 使用：
+
+```text
+/full-code-review
+```
+
+也可以让 Claude 或其他 Agent 读取通用 Prompt：
+
+```text
+prompts/full-code-review.md
+```
+
+Codex 可以使用：
 
 ```text
 Use $full-code-review to review the entire project after development and report bugs, risks, and meaningful optimization opportunities.
 ```
 
-这个 skill 要求 Codex 先建立全仓库地图，再系统阅读一方代码，输出真实 bug、风险和优化点；不会把结果变成重复的“补测试”清单。
+这套 review 入口要求 Agent 先建立全仓库地图，再系统阅读一方代码，输出真实 bug、风险和优化点；不会把结果变成重复的“补测试”清单。
 
 ## 避免重复造轮子
 
@@ -267,11 +284,17 @@ scripts/rca_new.sh
 
 RCA 的可复用结论写入 `docs/ai/check-rules.md`，让后续 Agent 在开发前能看到真实踩坑沉淀出的检查规则。
 
-### 全代码 Review Skill
+### 全代码 Review 入口
 
-开发完成并通过常规实现/验收流程后，使用 `.codex/skills/full-code-review/` 触发 Codex 全仓库 review。
+开发完成并通过常规实现/验收流程后，使用 `.claude/commands/full-code-review.md`、`.codex/skills/full-code-review/` 或 `prompts/full-code-review.md` 触发全仓库 review。
 
-推荐在需要最终检查时直接说：
+Claude Code 推荐：
+
+```text
+/full-code-review
+```
+
+Codex 推荐：
 
 ```text
 用 full-code-review 帮我做全项目代码 review，重点找 bug、风险和有效优化点，不要重复泛泛建议补测试。
@@ -500,7 +523,8 @@ bash setup_ai_harness.sh --force
 全代码 Review：
 
 ```text
-用 full-code-review 帮我做全项目代码 review，重点找 bug、风险和有效优化点，不要重复泛泛建议补测试。
+Claude Code 使用 /full-code-review；Codex 使用 full-code-review。
+帮我做全项目代码 review，重点找 bug、风险和有效优化点，不要重复泛泛建议补测试。
 ```
 
 长任务接力：
@@ -524,7 +548,7 @@ bash setup_ai_harness.sh --force
 - 模糊需求先写 `spec.md`。
 - 新增代码前先查找已有实现和公共工具，能复用就复用。
 - 实现后必须由 Evaluator 独立验收。
-- 项目完成后再用 `full-code-review` 做一次全仓库 review，不要拆成多次局部检查。
+- 项目完成后再用 Claude `/full-code-review` 或 Codex `full-code-review` 做一次全仓库 review，不要拆成多次局部检查。
 - 长任务必须更新状态文件。
 - 技术债每天小步偿还，不攒到最后集中处理。
 - API key 永远不要进仓库。
