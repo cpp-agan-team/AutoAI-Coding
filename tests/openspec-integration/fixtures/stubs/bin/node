@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+printf 'node\t%s\n' "$*" >> "${STUB_CALL_LOG:?STUB_CALL_LOG is required}"
+
+case "${1:-}" in
+    --version|-v)
+        printf '%s\n' "${STUB_NODE_VERSION:-v20.19.0}"
+        ;;
+    -|--print|-p|-e)
+        # Setup uses the real Node runtime to validate JSON after the version
+        # probe.  Keep the controllable version surface above, but delegate
+        # actual JavaScript execution so tests exercise the production parser.
+        PATH=${REAL_TEST_PATH:?REAL_TEST_PATH is required for Node execution} \
+            exec node "$@"
+        ;;
+    *)
+        # Re-runs validate generated policy scripts by filename before any
+        # target write. Delegate those ordinary Node invocations as well.
+        PATH=${REAL_TEST_PATH:?REAL_TEST_PATH is required for Node execution} \
+            exec node "$@"
+        ;;
+esac

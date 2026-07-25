@@ -1,0 +1,11 @@
+spec.md
+todo.md
+evaluation.md
+verification.md
+tasks
+scripts/task_new.sh
+prompts/task.md
+docs/ai/task-sandbox.md
+.clang-format
+.vscode/settings.json
+.vscode/extensions.json

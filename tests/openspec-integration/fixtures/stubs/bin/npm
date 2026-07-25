@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+printf 'npm\t%s\n' "$*" >> "${STUB_CALL_LOG:?STUB_CALL_LOG is required}"
+
+if [[ "${STUB_NPM_MODE:-success}" == fail ]]; then
+    printf 'npm stub: injected failure\n' >&2
+    exit 42
+fi
+
+case "${1:-}" in
+    --version|-v)
+        printf '%s\n' "${STUB_NPM_VERSION:-10.8.2}"
+        ;;
+    *)
+        printf '{}\n'
+        ;;
+esac

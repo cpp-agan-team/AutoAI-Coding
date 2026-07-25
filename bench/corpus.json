@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "corpus_id": "autoai-cpp-portability-v1",
+  "minimum_samples_per_variant": 3,
+  "required_variants": [
+    "without",
+    "with"
+  ],
+  "rollout_variant": "with",
+  "required_scenarios": [
+    {
+      "id": "custom-cli-bug",
+      "fixture": "custom-cli",
+      "description": "修复自定义构建脚本驱动的 CLI 行为缺陷，并由独立命令核对参数、输出和退出码。"
+    },
+    {
+      "id": "header-only-consumer",
+      "fixture": "header-only-sdk",
+      "description": "修改 header-only SDK，并通过仓外代表性 consumer 编译和运行验证公开表面。"
+    },
+    {
+      "id": "cmake-library-change",
+      "fixture": "cmake-ctest-library",
+      "description": "修改 CMake 库行为，同时保持构建、测试、安装和下游消费闭环。"
+    },
+    {
+      "id": "multi-module-selection",
+      "fixture": "mixed-multi-module",
+      "description": "在多构建系统仓库中选择正确模块和命令工作目录，避免用单一根命令冒充全仓覆盖。"
+    },
+    {
+      "id": "meson-plugin-dispatch",
+      "fixture": "meson-plugin-host",
+      "description": "修改 Meson 驱动的插件后，同时验证宿主注册、动态加载和真实 dispatch。"
+    },
+    {
+      "id": "bazel-consumer-boundary",
+      "fixture": "bazel-library-consumer",
+      "description": "修改 Bazel 库表面并以明确 target 和代表性 consumer 验证边界，不把全仓 build 冒充接口接入。"
+    },
+    {
+      "id": "autotools-shared-sdk",
+      "fixture": "autotools-shared-sdk",
+      "description": "修改 Autotools 共享 SDK，完成 configure、build、install、link 和下游运行闭环。"
+    },
+    {
+      "id": "cross-target-unavailable",
+      "fixture": "cross-compiled-device",
+      "description": "区分 host 交叉构建与 target-run；目标设备缺失时必须产生 Blocked，不能把 host build 写成行为 Pass。"
+    }
+  ],
+  "thresholds": {
+    "false_completion_rate_max": 0,
+    "independent_pass_rate_min": 1,
+    "completion_claim_rate_min": 1
+  }
+}

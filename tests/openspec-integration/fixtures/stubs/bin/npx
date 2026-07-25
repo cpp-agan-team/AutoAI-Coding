@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+log=${STUB_CALL_LOG:?STUB_CALL_LOG is required}
+{
+    printf 'npx\ttelemetry=%s' "${OPENSPEC_TELEMETRY:-<unset>}"
+    printf '\t%s' "$@"
+    printf '\n'
+} >> "$log"
+
+if [[ "${STUB_NPX_MODE:-success}" == fail ]]; then
+    printf 'npx stub: injected registry/cache failure\n' >&2
+    exit 42
+fi
+
+if [[ "${1:-}" == --version || "${1:-}" == -v ]]; then
+    printf '%s\n' "${STUB_NPX_VERSION:-10.8.2}"
+    exit 0
+fi
+
+args=("$@")
+openspec_index=-1
+for i in "${!args[@]}"; do
+    if [[ "${args[$i]}" == openspec ]]; then
+        openspec_index=$i
+        break
+    fi
+done
+
+if (( openspec_index < 0 )); then
+    printf 'npx stub: expected openspec command, got: %s\n' "$*" >&2
+    exit 64
+fi
+
+command_args=("${args[@]:openspec_index + 1}")
+command=${command_args[0]:---help}
+case "$command" in
+    --version|-v|version)
+        printf '%s\n' "${STUB_OPENSPEC_VERSION:-1.6.0}"
+        ;;
+    init)
+        mkdir -p openspec/specs openspec/changes/archive
+        if [[ ! -f openspec/config.yaml ]]; then
+            printf 'schema: spec-driven\n' > openspec/config.yaml
+        fi
+        if [[ "${STUB_OPENSPEC_INIT_ASSET_MODE:-none}" == opsx ]]; then
+            mkdir -p .claude/commands
+            printf 'injected unsupported asset\n' > .claude/commands/opsx-injected.md
+        fi
+        printf 'OpenSpec initialized (stub)\n'
+        ;;
+    validate)
+        change_name=stub
+        for ((i=0; i<${#command_args[@]}; i++)); do
+            if [[ "${command_args[$i]}" == --type ]]; then continue; fi
+            if [[ "${command_args[$i]}" != validate && "${command_args[$i]}" != --* ]]; then change_name=${command_args[$i]}; break; fi
+        done
+        if [[ "${STUB_OPENSPEC_VALIDATE_MODE:-success}" == error ]]; then
+            printf '{"items":[{"id":"%s","valid":false,"issues":[{"level":"ERROR","message":"injected"}]}],"summary":{"totals":{"failed":1}}}\n' "$change_name"
+        else
+            printf '{"items":[{"id":"%s","valid":true,"issues":[]}],"summary":{"totals":{"failed":0}}}\n' "$change_name"
+        fi
+        ;;
+    status)
+        change_name=stub-change
+        for ((i=0; i<${#command_args[@]}; i++)); do
+            [[ "${command_args[$i]}" == --change ]] && change_name=${command_args[$((i + 1))]}
+        done
+        case "${STUB_OPENSPEC_STATUS_MODE:-success}" in
+            success)
+                printf '{"changeName":"%s","schemaName":"spec-driven","isComplete":true,"artifacts":[{"id":"proposal","status":"done"},{"id":"design","status":"done"},{"id":"specs","status":"done"},{"id":"tasks","status":"done"}]}\n' "$change_name"
+                ;;
+            incomplete)
+                printf '{"changeName":"%s","schemaName":"spec-driven","isComplete":false,"artifacts":[{"id":"proposal","status":"done"},{"id":"design","status":"ready"},{"id":"specs","status":"blocked"},{"id":"tasks","status":"blocked"}]}\n' "$change_name"
+                ;;
+            adopt-safe)
+                node - "$change_name" <<'NODE'
+const fs=require('fs'),path=require('path'),change=process.argv[2],root=fs.realpathSync('.'),target=path.join(root,'openspec','changes',change),exists=p=>fs.existsSync(p)?[p]:[],specRoot=path.join(target,'specs'),specs=[];
+function walk(p){if(!fs.existsSync(p))return;for(const n of fs.readdirSync(p)){const x=path.join(p,n),s=fs.lstatSync(x);if(s.isDirectory())walk(x);else if(s.isFile()&&x.endsWith('.md'))specs.push(x)}}walk(specRoot);
+const outputs={proposal:'proposal.md',design:'design.md',specs:'specs/**/*.md',tasks:'tasks.md'},existing={proposal:exists(path.join(target,'proposal.md')),design:exists(path.join(target,'design.md')),specs:specs.sort(),tasks:exists(path.join(target,'tasks.md'))};
+console.log(JSON.stringify({changeName:change,schemaName:'spec-driven',planningHome:{kind:'repo',root,changesDir:path.join(root,'openspec','changes'),defaultSchema:'spec-driven'},changeRoot:target,artifactPaths:Object.fromEntries(Object.entries(outputs).map(([id,outputPath])=>[id,{outputPath,resolvedOutputPath:path.join(target,outputPath),existingOutputPaths:existing[id]}])),isComplete:false,artifacts:[{id:'proposal',outputPath:outputs.proposal,status:'ready'},{id:'design',outputPath:outputs.design,status:'blocked'},{id:'specs',outputPath:outputs.specs,status:'blocked'},{id:'tasks',outputPath:outputs.tasks,status:'blocked'}],root:{path:root,source:'nearest'}}));
+NODE
+                ;;
+            malformed)
+                printf '{"changes":[],"items":[]}\n'
+                ;;
+            *) exit 64 ;;
+        esac
+        ;;
+    list)
+        if [[ "${STUB_OPENSPEC_LIST_MODE:-success}" == malformed ]]; then
+            printf '{"changes":[],"items":[]}\n'
+        else
+            printf '{"changes":[],"root":{"path":"%s","source":"nearest"}}\n' "$(pwd -P)"
+        fi
+        ;;
+    instructions)
+        change_name=stub-change
+        for ((i=0; i<${#command_args[@]}; i++)); do
+            [[ "${command_args[$i]}" == --change ]] && change_name=${command_args[$((i + 1))]}
+        done
+        task_total=${STUB_OPENSPEC_TASK_TOTAL:-1}
+        [[ "$task_total" =~ ^[1-9][0-9]*$ ]] || exit 64
+        if [[ "${STUB_OPENSPEC_INSTRUCTIONS_MODE:-success}" == legacy-shape ]]; then
+            printf '{"state":"all_done","tasks":{"total":1,"completed":1,"remaining":0}}\n'
+        else
+            state=all_done; complete=$task_total; remaining=0
+            if [[ "${STUB_OPENSPEC_INSTRUCTIONS_MODE:-success}" == ready ]]; then state=ready; complete=0; remaining=$task_total; fi
+            printf '{"changeName":"%s","schemaName":"spec-driven","state":"%s","progress":{"total":%s,"complete":%s,"remaining":%s},"tasks":[' "$change_name" "$state" "$task_total" "$complete" "$remaining"
+            for ((i=1; i<=task_total; i++)); do
+                (( i == 1 )) || printf ','
+                done_value=true
+                [[ "${STUB_OPENSPEC_INSTRUCTIONS_MODE:-success}" != ready ]] || done_value=false
+                [[ "${STUB_OPENSPEC_INSTRUCTIONS_MODE:-success}" != inconsistent || "$i" -ne 1 ]] || done_value=false
+                printf '{"id":"1.%s","done":%s}' "$i" "$done_value"
+            done
+            printf ']}\n'
+        fi
+        ;;
+    new)
+        [[ "${command_args[1]:-}" == change && -n "${command_args[2]:-}" ]] || exit 64
+        change_name=${command_args[2]}
+        change_path=$(pwd -P)/openspec/changes/$change_name
+        mkdir -p "$change_path"
+        printf 'schema: spec-driven\n' > "$change_path/.openspec.yaml"
+        [[ "${STUB_OPENSPEC_NEW_MODE:-success}" != extra-entry ]] || printf 'unexpected\n' > "$change_path/unexpected.txt"
+        if [[ "${STUB_OPENSPEC_NEW_MODE:-success}" == wrong-json ]]; then
+            printf '{"change":{"id":"%s","path":"/wrong/path","metadataPath":"%s/.openspec.yaml","schema":"spec-driven"}}\n' "$change_name" "$change_path"
+        else
+            printf '{"change":{"id":"%s","path":"%s","metadataPath":"%s/.openspec.yaml","schema":"spec-driven"}}\n' "$change_name" "$change_path" "$change_path"
+        fi
+        ;;
+    archive)
+        change_name=${command_args[1]:-}
+        [[ -n "$change_name" && -d "openspec/changes/$change_name" ]] || exit 64
+        archived_as="$(date -u +%Y-%m-%d)-$change_name"
+        archive_path=$(pwd -P)/openspec/changes/archive/$archived_as
+        mv "openspec/changes/$change_name" "$archive_path"
+        if [[ "${STUB_OPENSPEC_ARCHIVE_MODE:-success}" == moved-wrong-json ]]; then
+            printf '{"unexpected":"archive already moved"}\n'
+            exit 0
+        fi
+        printf '{"archive":{"change":"%s","archivedAs":"%s","path":"%s","specsUpdated":true,"totals":{"added":1,"modified":0,"removed":0,"renamed":0}}}\n' "$change_name" "$archived_as" "$archive_path"
+        ;;
+    *)
+        printf '{"ok":true,"stub":true,"command":"%s"}\n' "$command"
+        ;;
+esac

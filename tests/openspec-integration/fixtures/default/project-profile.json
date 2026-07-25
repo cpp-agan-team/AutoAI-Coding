@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "modules": [
+    {
+      "id": "root",
+      "root": ".",
+      "adapter": "custom",
+      "cpp_standards": [
+        "unknown"
+      ],
+      "compilers": [
+        "unknown"
+      ],
+      "target_platforms": [
+        "linux"
+      ],
+      "path_roles": {
+        "production": [],
+        "test": [],
+        "example": [],
+        "generated": [],
+        "vendor": [],
+        "build_metadata": []
+      },
+      "capabilities": {},
+      "build_graph_entries": [],
+      "distribution_surfaces": []
+    }
+  ],
+  "commands": [],
+  "toolchain_identity": []
+}
